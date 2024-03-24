@@ -34,7 +34,7 @@ def join_names(row):
 def date_unify(row):
     import pandas as pd
     cols = row.split(';')
-    cols[1] = str(pd.to_datetime(cols[1], dayfirst=True).date())
+    cols[1] = str(pd.to_datetime(cols[1], dayfirst=False).date())
     return ';'.join(cols)
 
 
@@ -44,6 +44,7 @@ cleaned_data = (
     p
     | beam.io.ReadFromText("names_data.csv", skip_header_lines=True)
     | beam.Filter(is_empty)
+    | beam.Distinct()
     | beam.Map(name_capitalize)
     | beam.Map(symbols_cleaning)
     | beam.Map(join_names)
@@ -87,3 +88,6 @@ p.run()
 
 #ideas: country mapping from different file
 #duplicated check!
+#new platform check
+#coś z tym Flat map by się też przydało
+#beam from csv?
