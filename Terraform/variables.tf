@@ -33,3 +33,33 @@ variable "vm_params" {
         error_message = "VM must be at least 4 characters."
     }
 }
+
+variable "bucket_params" {
+    type = object({
+        name = string
+        location = string
+        storage_class = string
+    })
+    description = "Bucket parameters"
+    default = {
+        name = "test-terraform-bucket"
+        location = "US"
+        storage_class = "STANDARD"
+    }
+    validation {
+        condition = length(var.bucket_params.name) > 3
+        error_message = "Bucket name must be at least 4 characters."
+    }
+}
+
+variable "object_params" {
+    type = object({
+        name = string
+        source = string
+    })
+    description = "Object parameters"
+    default = {
+        name = "data.txt"
+        source = "/mnt/c/Users/KatarzynaBanach/helping_files_bp/data.csv"
+    }
+}

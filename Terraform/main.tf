@@ -5,7 +5,7 @@ provider "google" {
     zone = var.zone
 }
 
-resource "google_compute_instance" "my_instance" {
+resource "google_compute_instance" "test_instance" {
     name = var.vm_params.name
     machine_type = var.vm_params.machine_type
     zone = var.vm_params.zone
@@ -28,14 +28,14 @@ resource "google_compute_instance" "my_instance" {
 }
 
 resource "google_storage_bucket" "test_bucket" {
-  name     = "test-terraform-bucket"
-  location = "US"
-  storage_class = "STANDARD"
+  name     = var.bucket_params.name
+  location = var.bucket_params.location
+  storage_class = var.bucket_params.storage_class
 }
 
 
 resource "google_storage_bucket_object" "test_object" {
-    name = "data.txt"
-    source = "/mnt/c/Users/KatarzynaBanach/helping_files_bp/data.csv"
+    name = var.object_params.name
+    source = var.object_params.source
     bucket = google_storage_bucket.test_bucket.name
 }
