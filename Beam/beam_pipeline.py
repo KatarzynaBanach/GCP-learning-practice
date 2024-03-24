@@ -83,11 +83,3 @@ facebook_data = (
 )
 
 p.run()
-
-#first install apache_beam !pip install apache_beam & pandas
-
-#ideas: country mapping from different file
-#duplicated check!
-#new platform check
-#coś z tym Flat map by się też przydało
-#beam from csv?
