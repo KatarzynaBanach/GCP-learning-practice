@@ -1,5 +1,18 @@
 import apache_beam as beam
+from google.cloud import bigquery
+from apache_beam.runners.runner import PipelineState
 
+client = bigquery.Client()
+dataset_name = 'registrated_clients'
+dataset_id = f'{client.project}.{dataset_name}'
+
+try:
+    client.get_dataset(dataset_id)
+except:
+    dataset = bigquery.Dataset(dataset_id)
+    dataset.location = "US"
+    dataset.description = "Registrated client details"
+    dataset_ref = client.create_dataset(dataset, timeout=30)
 def is_empty(row):
     cols = row.split(';')
     if cols[0] == '' or cols[2] == '' or cols[3] == '' or cols[4] == '' or cols[6] == '' :
@@ -37,12 +50,26 @@ def date_unify(row):
     cols[1] = str(pd.to_datetime(cols[1], dayfirst=False).date())
     return ';'.join(cols)
 
+def to_json(row):
+    cols = row.split(';')
+
+    json_str = {'customer': cols[0],
+                'birthday': cols[1],
+                'nationality': cols[2],
+                'sex': cols[3],
+                'platform': cols[4]
+                }
+    return json_str
+
+schema = 'customer:STRING, birthday:DATE, nationality:STRING, sex:STRING, platform:STRING'
+pinterest_table_name = f'{client.project}:{dataset_name}.pinterest_data'
+facebook_table_name = f'{client.project}:{dataset_name}.facebook_data'
 
 p = beam.Pipeline()
 
 cleaned_data = (
     p
-    | beam.io.ReadFromText("names_data.csv", skip_header_lines=True)
+    | beam.io.ReadFromText("customer_data.csv", skip_header_lines=True)
     | beam.Filter(is_empty)
     | beam.Distinct()
     | beam.Map(name_capitalize)
@@ -82,4 +109,39 @@ facebook_data = (
     | 'facebook print' >> beam.Map(print)
 )
 
-p.run()
+(
+    pinterest_data
+    | 'pinterest to json' >> beam.Map(to_json)
+    | 'write pinterest' >> beam.io.WriteToBigQuery(
+        table=pinterest_table_name,
+        schema=schema,
+        create_disposition=beam.io.BigQueryDisposition.CREATE_IF_NEEDED,
+        write_disposition=beam.io.BigQueryDisposition.WRITE_APPEND,
+        custom_gcs_temp_location='gs://temp_beam_location',
+        additional_bq_parameters={'timePartitioning': {'type': 'DAY'}}
+        #jakaś data wrzucenia by się przydała!!! i id procesu!!
+    )
+)
+
+(
+    facebook_data
+    | 'facebook to json' >> beam.Map(to_json)
+    | 'write facebook' >> beam.io.WriteToBigQuery(
+        table=facebook_table_name,
+        schema=schema,
+        create_disposition=beam.io.BigQueryDisposition.CREATE_IF_NEEDED,
+        write_disposition=beam.io.BigQueryDisposition.WRITE_APPEND,
+        custom_gcs_temp_location='gs://temp_beam_location',
+        additional_bq_parameters={'timePartitioning': {'type': 'DAY'}}
+        #jakaś data wrzucenia by się przydała!!! i id procesu!!
+    )
+)
+
+pipeline_state = p.run().wait_until_finish()
+
+if pipeline_state == PipelineState.DONE:
+    print('Pipeline has completed successfully.')
+elif pipeline_state == PipelineState.FAILED:
+    print('Pipeline has failed.')
+else:
+    print('Pipeline in unknown state.')
