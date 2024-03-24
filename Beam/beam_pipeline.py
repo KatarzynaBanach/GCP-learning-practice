@@ -1,6 +1,9 @@
 import apache_beam as beam
 from google.cloud import bigquery
 from apache_beam.runners.runner import PipelineState
+import uuid
+
+pipeline_id = str(uuid.uuid4())
 
 client = bigquery.Client()
 dataset_name = 'registrated_clients'
@@ -12,7 +15,7 @@ except:
     dataset = bigquery.Dataset(dataset_id)
     dataset.location = "US"
     dataset.description = "Registrated client details"
-    dataset_ref = client.create_dataset(dataset, timeout=30)
+    dataset_ref = client.create_dataset(dataset, timeout=60)
 def is_empty(row):
     cols = row.split(';')
     if cols[0] == '' or cols[2] == '' or cols[3] == '' or cols[4] == '' or cols[6] == '' :
@@ -50,6 +53,16 @@ def date_unify(row):
     cols[1] = str(pd.to_datetime(cols[1], dayfirst=False).date())
     return ';'.join(cols)
 
+def add_created_at_and_id(row):
+    from datetime import datetime
+    _created_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    return f'{row};{_created_at};{pipeline_id}'
+
+def delete_platform_column(row):
+    cols = row.split(';')
+    del cols[4]
+    return ';'.join(cols)
+
 def to_json(row):
     cols = row.split(';')
 
@@ -57,11 +70,22 @@ def to_json(row):
                 'birthday': cols[1],
                 'nationality': cols[2],
                 'sex': cols[3],
-                'platform': cols[4]
+                '_created_at': cols[4],
+                '_pipeline_id': cols[5]
                 }
     return json_str
 
-schema = 'customer:STRING, birthday:DATE, nationality:STRING, sex:STRING, platform:STRING'
+# schema_definition = [
+#     {"name": "customer", "type": "STRING", "mode": "REQUIRED"},
+#     {"name": "birthday", "type": "DATE", "mode": "REQUIRED"},
+#     {"name": "nationality", "type": "STRING", "mode": "REQUIRED"},
+#     {"name": "sex", "type": "STRING", "mode": "NULLABLE"},
+#     {"name": "_created_at", "type": "DATETIME", "mode": "REQUIRED"},
+#     {"name": "_pipeline_id", "type": "STRING", "mode": "REQUIRED"}
+# ]
+
+schema_definition = 'customer:STRING, birthday:DATE, nationality:STRING, sex:STRING, _created_at:DATETIME, _pipeline_id:STRING'
+
 pinterest_table_name = f'{client.project}:{dataset_name}.pinterest_data'
 facebook_table_name = f'{client.project}:{dataset_name}.facebook_data'
 
@@ -76,16 +100,19 @@ cleaned_data = (
     | beam.Map(symbols_cleaning)
     | beam.Map(join_names)
     | beam.Map(date_unify)
+    | beam.Map(add_created_at_and_id)
 )
 
 pinterest_data = (
     cleaned_data
-    | beam.Filter(lambda row: row.split(';')[4].lower() == 'pinterest')
+    | 'pinterest filter' >> beam.Filter(lambda row: row.split(';')[4].lower() == 'pinterest')
+    | 'pinterest delete col' >> beam.Map(delete_platform_column)
 )
 
 facebook_data = (
     cleaned_data
-    | beam.Filter(lambda row: row.split(';')[4].lower() == 'facebook')
+    | 'facebook filter' >> beam.Filter(lambda row: row.split(';')[4].lower() == 'facebook')
+    | 'facebook delete col' >> beam.Map(delete_platform_column)
 )
 
 (
@@ -114,12 +141,11 @@ facebook_data = (
     | 'pinterest to json' >> beam.Map(to_json)
     | 'write pinterest' >> beam.io.WriteToBigQuery(
         table=pinterest_table_name,
-        schema=schema,
+        schema=schema_definition,
         create_disposition=beam.io.BigQueryDisposition.CREATE_IF_NEEDED,
         write_disposition=beam.io.BigQueryDisposition.WRITE_APPEND,
         custom_gcs_temp_location='gs://temp_beam_location',
         additional_bq_parameters={'timePartitioning': {'type': 'DAY'}}
-        #jakaś data wrzucenia by się przydała!!! i id procesu!!
     )
 )
 
@@ -128,12 +154,11 @@ facebook_data = (
     | 'facebook to json' >> beam.Map(to_json)
     | 'write facebook' >> beam.io.WriteToBigQuery(
         table=facebook_table_name,
-        schema=schema,
+        schema=schema_definition,
         create_disposition=beam.io.BigQueryDisposition.CREATE_IF_NEEDED,
         write_disposition=beam.io.BigQueryDisposition.WRITE_APPEND,
         custom_gcs_temp_location='gs://temp_beam_location',
         additional_bq_parameters={'timePartitioning': {'type': 'DAY'}}
-        #jakaś data wrzucenia by się przydała!!! i id procesu!!
     )
 )
 
