@@ -22,5 +22,5 @@ with models.DAG('customer_dag',
     t1 = DataFlowPythonOperator(
         task_id='beamtask',
         py_file='',  #later, after creating aiflowenvirongment
-        options={'input': }
+        options={'input': 'gs://raw-customer-data-1122/customer_data.csv'}
     )
