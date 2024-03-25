@@ -18,10 +18,3 @@ resource "google_storage_bucket" "raw_customer_data" {
   location = var.location
   storage_class = var.storage_class
 }
-
-
-resource "google_storage_bucket_object" "customer_data" {
-    name = var.object_params.name
-    source = var.object_params.source
-    bucket = google_storage_bucket.raw_customer_data.name
-}
