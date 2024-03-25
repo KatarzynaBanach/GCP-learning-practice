@@ -93,7 +93,7 @@ p = beam.Pipeline()
 
 cleaned_data = (
     p
-    | beam.io.ReadFromText("gs://raw-customer-data-1122/customer_data.csv", skip_header_lines=True)
+    | beam.io.ReadFromText("customer_data.csv", skip_header_lines=True)
     | beam.Filter(is_empty)
     | beam.Distinct()
     | beam.Map(name_capitalize)
@@ -144,7 +144,7 @@ facebook_data = (
         schema=schema_definition,
         create_disposition=beam.io.BigQueryDisposition.CREATE_IF_NEEDED,
         write_disposition=beam.io.BigQueryDisposition.WRITE_APPEND,
-        custom_gcs_temp_location='gs://beam-stage-1122',
+        custom_gcs_temp_location='gs://temp_beam_location',
         additional_bq_parameters={'timePartitioning': {'type': 'DAY'}}
     )
 )
@@ -157,7 +157,7 @@ facebook_data = (
         schema=schema_definition,
         create_disposition=beam.io.BigQueryDisposition.CREATE_IF_NEEDED,
         write_disposition=beam.io.BigQueryDisposition.WRITE_APPEND,
-        custom_gcs_temp_location='gs://beam-stage-1122',
+        custom_gcs_temp_location='gs://temp_beam_location',
         additional_bq_parameters={'timePartitioning': {'type': 'DAY'}}
     )
 )
