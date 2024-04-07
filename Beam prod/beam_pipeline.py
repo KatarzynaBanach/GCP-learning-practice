@@ -1,9 +1,9 @@
+# działające:
 import apache_beam as beam
 from google.cloud import bigquery
 from apache_beam.runners.runner import PipelineState
-import uuid
 
-pipeline_id = str(uuid.uuid4())
+from apache_beam.options.pipeline_options import PipelineOptions
 
 client = bigquery.Client()
 dataset_name = 'registrated_clients'
@@ -13,7 +13,7 @@ try:
     client.get_dataset(dataset_id)
 except:
     dataset = bigquery.Dataset(dataset_id)
-    dataset.location = "US"
+    dataset.location = "EU"
     dataset.description = "Registrated client details"
     dataset_ref = client.create_dataset(dataset, timeout=60)
 def is_empty(row):
@@ -54,8 +54,10 @@ def date_unify(row):
     return ';'.join(cols)
 
 def add_created_at_and_id(row):
+    import uuid
     from datetime import datetime
     _created_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    pipeline_id = str(uuid.uuid4())
     return f'{row};{_created_at};{pipeline_id}'
 
 def delete_platform_column(row):
@@ -75,25 +77,54 @@ def to_json(row):
                 }
     return json_str
 
-# schema_definition = [
-#     {"name": "customer", "type": "STRING", "mode": "REQUIRED"},
-#     {"name": "birthday", "type": "DATE", "mode": "REQUIRED"},
-#     {"name": "nationality", "type": "STRING", "mode": "REQUIRED"},
-#     {"name": "sex", "type": "STRING", "mode": "NULLABLE"},
-#     {"name": "_created_at", "type": "DATETIME", "mode": "REQUIRED"},
-#     {"name": "_pipeline_id", "type": "STRING", "mode": "REQUIRED"}
-# ]
 
 schema_definition = 'customer:STRING, birthday:DATE, nationality:STRING, sex:STRING, _created_at:DATETIME, _pipeline_id:STRING'
 
 pinterest_table_name = f'{client.project}:{dataset_name}.pinterest_data'
 facebook_table_name = f'{client.project}:{dataset_name}.facebook_data'
 
-p = beam.Pipeline()
+# -------
+# options = PipelineOptions()
+
+# options.project = 'client.project'
+# options.job_name = 'your-job-name'
+# options.staging_location = 'gs://temp_beam_location/staging'
+# options.temp_location = 'gs://temp_beam_location/temp'
+# options.region = 'us-central1'  # Choose your preferred region
+# options.runner = 'DataflowRunner'
+
+# argv = [
+# '--project={0}'.format(client.project),
+# '--job_name=myjob',
+# '--save_main_session',
+# '--worker_machine_type=e2-standard-2',
+# '--staging_location=gs://{0}/staging/'.format("gs://temp_beam_location/staging"),
+# '--temp_location=gs://{0}/staging/'.format("gs://temp_beam_location/temp"),
+# '--runner={0}'.format("DataflowRunner"),
+# '--region={0}'.format("us-central1"),
+# '--max_num_workers=5'
+# ]
+
+# p = beam.Pipeline(argv=argv)
+
+options = PipelineOptions(
+    project='digital-bonfire-419015',
+    region='europe-central2',  # Choose the appropriate region
+    job_name='examplejob2',
+    temp_location='gs://temp_beam_location_1/staging', 
+    staging_location='gs://temp_beam_location_1/staging',
+    runner='DataflowRunner',
+    worker_machine_type='e2-standard-2'
+)
+
+# -------
+
+p = beam.Pipeline(options=options)
+
 
 cleaned_data = (
     p
-    | beam.io.ReadFromText("customer_data.csv", skip_header_lines=True)
+    | beam.io.ReadFromText("gs://temp_beam_location_1/customer/customer_data.csv", skip_header_lines=True)
     | beam.Filter(is_empty)
     | beam.Distinct()
     | beam.Map(name_capitalize)
@@ -144,7 +175,7 @@ facebook_data = (
         schema=schema_definition,
         create_disposition=beam.io.BigQueryDisposition.CREATE_IF_NEEDED,
         write_disposition=beam.io.BigQueryDisposition.WRITE_APPEND,
-        custom_gcs_temp_location='gs://temp_beam_location',
+        custom_gcs_temp_location='gs://temp_beam_location_1/stagings',
         additional_bq_parameters={'timePartitioning': {'type': 'DAY'}}
     )
 )
@@ -157,16 +188,18 @@ facebook_data = (
         schema=schema_definition,
         create_disposition=beam.io.BigQueryDisposition.CREATE_IF_NEEDED,
         write_disposition=beam.io.BigQueryDisposition.WRITE_APPEND,
-        custom_gcs_temp_location='gs://temp_beam_location',
+        custom_gcs_temp_location='gs://temp_beam_location_1/staging',
         additional_bq_parameters={'timePartitioning': {'type': 'DAY'}}
     )
 )
 
-pipeline_state = p.run().wait_until_finish()
+# pipeline_state = p.run().wait_until_finish()
 
-if pipeline_state == PipelineState.DONE:
-    print('Pipeline has completed successfully.')
-elif pipeline_state == PipelineState.FAILED:
-    print('Pipeline has failed.')
-else:
-    print('Pipeline in unknown state.')
+# if pipeline_state == PipelineState.DONE:
+#     print('Pipeline has completed successfully.')
+# elif pipeline_state == PipelineState.FAILED:
+#     print('Pipeline has failed.')
+# else:
+#     print('Pipeline in unknown state.')
+
+p.run()
