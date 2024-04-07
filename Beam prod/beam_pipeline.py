@@ -161,7 +161,7 @@ facebook_data = (
         schema=schema_definition,
         create_disposition=beam.io.BigQueryDisposition.CREATE_IF_NEEDED,
         write_disposition=beam.io.BigQueryDisposition.WRITE_APPEND,
-        custom_gcs_temp_location='gs://temp_beam_location_1/stagings',
+        custom_gcs_temp_location='gs://temp_beam_location_1/staging',
         additional_bq_parameters={'timePartitioning': {'type': 'DAY'}}
     )
 )
