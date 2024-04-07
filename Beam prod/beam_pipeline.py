@@ -1,6 +1,7 @@
-# działające:
+# ok
 import apache_beam as beam
 from google.cloud import bigquery
+import google.cloud.storage as gcs
 from apache_beam.runners.runner import PipelineState
 
 from apache_beam.options.pipeline_options import PipelineOptions
@@ -33,7 +34,7 @@ def symbols_cleaning(row):
     cols = row.split(';')
     row = []
     for idx, col in enumerate(cols):
-        #exeption for date column
+        # exeption for date column
         if idx == 3:
             row.append(col)
         else:
@@ -54,11 +55,9 @@ def date_unify(row):
     return ';'.join(cols)
 
 def add_created_at_and_id(row):
-    import uuid
     from datetime import datetime
     _created_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    pipeline_id = str(uuid.uuid4())
-    return f'{row};{_created_at};{pipeline_id}'
+    return f'{row};{_created_at}'
 
 def delete_platform_column(row):
     cols = row.split(';')
@@ -72,26 +71,16 @@ def to_json(row):
                 'birthday': cols[1],
                 'nationality': cols[2],
                 'sex': cols[3],
-                '_created_at': cols[4],
-                '_pipeline_id': cols[5]
+                '_created_at': cols[4]
                 }
     return json_str
 
 
-schema_definition = 'customer:STRING, birthday:DATE, nationality:STRING, sex:STRING, _created_at:DATETIME, _pipeline_id:STRING'
+schema_definition = 'customer:STRING, birthday:DATE, nationality:STRING, sex:STRING, _created_at:DATETIME'
 
 pinterest_table_name = f'{client.project}:{dataset_name}.pinterest_data'
 facebook_table_name = f'{client.project}:{dataset_name}.facebook_data'
 
-# -------
-# options = PipelineOptions()
-
-# options.project = 'client.project'
-# options.job_name = 'your-job-name'
-# options.staging_location = 'gs://temp_beam_location/staging'
-# options.temp_location = 'gs://temp_beam_location/temp'
-# options.region = 'us-central1'  # Choose your preferred region
-# options.runner = 'DataflowRunner'
 
 # argv = [
 # '--project={0}'.format(client.project),
@@ -146,26 +135,23 @@ facebook_data = (
     | 'facebook delete col' >> beam.Map(delete_platform_column)
 )
 
-(
-    cleaned_data
-    | 'total count' >> beam.combiners.Count.Globally()
-    | 'total map' >> beam.Map(lambda x: 'Total Count: '+ str(x))
-    | 'total print' >> beam.Map(print)
-)
+# clean_result = (
+#     cleaned_data
+#     | 'total count' >> beam.combiners.Count.Globally()
+#     | 'total map' >> beam.Map(lambda x: 'Total Count: '+ str(x))
+# )
 
-(
-    pinterest_data
-    | 'pinterest count' >> beam.combiners.Count.Globally()
-    | 'pinterest map' >> beam.Map(lambda x: 'Pinterest count: ' + str(x))
-    | 'pinterest print' >> beam.Map(print)
-)
+# pinterest_result = (
+#     pinterest_data
+#     | 'pinterest count' >> beam.combiners.Count.Globally()
+#     | 'pinterest map' >> beam.Map(lambda x: 'Pinterest count: ' + str(x))
+# )
 
-(
-    facebook_data
-    | 'facebook count' >> beam.combiners.Count.Globally()
-    | 'facebook map' >> beam.Map(lambda x: 'Facebook count: ' + str(x))
-    | 'facebook print' >> beam.Map(print)
-)
+# facebook_result =(
+#     facebook_data
+#     | 'facebook count' >> beam.combiners.Count.Globally()
+#     | 'facebook map' >> beam.Map(lambda x: 'Facebook count: ' + str(x))
+# )
 
 (
     pinterest_data
@@ -193,13 +179,29 @@ facebook_data = (
     )
 )
 
-# pipeline_state = p.run().wait_until_finish()
+pipeline_state = p.run().wait_until_finish()
 
-# if pipeline_state == PipelineState.DONE:
-#     print('Pipeline has completed successfully.')
-# elif pipeline_state == PipelineState.FAILED:
-#     print('Pipeline has failed.')
-# else:
-#     print('Pipeline in unknown state.')
+pipeline_result = ''
+if pipeline_state == PipelineState.DONE:
+    pipeline_result = 'Pipeline has completed successfully.'
+elif pipeline_state == PipelineState.FAILED:
+    pipeline_result = 'Pipeline has failed.'
+else:
+    pipeline_result = 'Pipeline in unknown state.'
 
-p.run()
+
+import google.cloud.storage as gcs
+import os
+
+with open('pipeline_status.txt', 'w') as f:
+    f.write(pipeline_result)
+
+gcs_bucket = 'temp_beam_location_1'
+bucket = gcs.Client().get_bucket(gcs_bucket)
+
+for blob in bucket.list_blobs(prefix='pipeline_result/'):
+  blob.delete()
+
+bucket.blob('pipeline_result/pipeline_status.txt').upload_from_filename('pipeline_status.txt')
+if os.path.exists("pipeline_status.txt"):
+  os.remove("pipeline_status.txt")
