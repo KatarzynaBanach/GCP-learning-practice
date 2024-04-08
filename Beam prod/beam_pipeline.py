@@ -75,6 +75,25 @@ def to_json(row):
                 }
     return json_str
 
+def split_by_sources(pcol, source):
+    return ( pcol
+            | f'{source} filter' >> beam.Filter(lambda row: row.split(';')[4].lower() == source)
+            | f'{source} delete col' >> beam.Map(delete_platform_column)
+            )
+
+def write_to_bq(pcol, source, table_name):
+    return ( pcol
+            | f'{source} to json' >> beam.Map(to_json)
+            | f'{source} write' >> beam.io.WriteToBigQuery(
+                table=table_name,
+                schema=schema_definition,
+                create_disposition=beam.io.BigQueryDisposition.CREATE_IF_NEEDED,
+                write_disposition=beam.io.BigQueryDisposition.WRITE_APPEND,
+                custom_gcs_temp_location='gs://temp_beam_location_1/staging',
+                additional_bq_parameters={'timePartitioning': {'type': 'DAY'}}
+                )
+            )
+
 
 schema_definition = 'customer:STRING, birthday:DATE, nationality:STRING, sex:STRING, _created_at:DATETIME'
 
@@ -102,11 +121,9 @@ options = PipelineOptions(
     job_name='examplejob2',
     temp_location='gs://temp_beam_location_1/staging', 
     staging_location='gs://temp_beam_location_1/staging',
-    runner='DataflowRunner',
+    runner='DirectRunner',
     worker_machine_type='e2-standard-2'
 )
-
-# -------
 
 p = beam.Pipeline(options=options)
 
@@ -123,17 +140,8 @@ cleaned_data = (
     | beam.Map(add_created_at_and_id)
 )
 
-pinterest_data = (
-    cleaned_data
-    | 'pinterest filter' >> beam.Filter(lambda row: row.split(';')[4].lower() == 'pinterest')
-    | 'pinterest delete col' >> beam.Map(delete_platform_column)
-)
-
-facebook_data = (
-    cleaned_data
-    | 'facebook filter' >> beam.Filter(lambda row: row.split(';')[4].lower() == 'facebook')
-    | 'facebook delete col' >> beam.Map(delete_platform_column)
-)
+pinterest_data = split_by_sources(cleaned_data, 'pinterest')
+facebook_data = split_by_sources(cleaned_data, 'facebook')
 
 # clean_result = (
 #     cleaned_data
@@ -153,31 +161,9 @@ facebook_data = (
 #     | 'facebook map' >> beam.Map(lambda x: 'Facebook count: ' + str(x))
 # )
 
-(
-    pinterest_data
-    | 'pinterest to json' >> beam.Map(to_json)
-    | 'write pinterest' >> beam.io.WriteToBigQuery(
-        table=pinterest_table_name,
-        schema=schema_definition,
-        create_disposition=beam.io.BigQueryDisposition.CREATE_IF_NEEDED,
-        write_disposition=beam.io.BigQueryDisposition.WRITE_APPEND,
-        custom_gcs_temp_location='gs://temp_beam_location_1/staging',
-        additional_bq_parameters={'timePartitioning': {'type': 'DAY'}}
-    )
-)
 
-(
-    facebook_data
-    | 'facebook to json' >> beam.Map(to_json)
-    | 'write facebook' >> beam.io.WriteToBigQuery(
-        table=facebook_table_name,
-        schema=schema_definition,
-        create_disposition=beam.io.BigQueryDisposition.CREATE_IF_NEEDED,
-        write_disposition=beam.io.BigQueryDisposition.WRITE_APPEND,
-        custom_gcs_temp_location='gs://temp_beam_location_1/staging',
-        additional_bq_parameters={'timePartitioning': {'type': 'DAY'}}
-    )
-)
+write_to_bq(pinterest_data, 'pinterest', pinterest_table_name)
+write_to_bq(facebook_data, 'facebook', facebook_table_name)
 
 pipeline_state = p.run().wait_until_finish()
 
