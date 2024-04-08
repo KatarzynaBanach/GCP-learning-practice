@@ -21,3 +21,6 @@ p = beam.Pipeline(options=options)
   | beam.Map(lambda x: x+1)
   | beam.io.textio.WriteToText(output_results,file_name_suffix='.csv'))
 p.run()
+
+
+#testing is possible with DirectRunner, it takes faster since it is run locally
