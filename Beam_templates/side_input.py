@@ -16,3 +16,5 @@ with beam.Pipeline() as p:
 
     # Output
     multiplied_values | beam.Map(print)
+#  AsSingleton(): A function used to convert a PCollectionView into a single value. 
+# This is commonly used when you have a side input PCollectionView containing a single value, such as a configuration or lookup value.
