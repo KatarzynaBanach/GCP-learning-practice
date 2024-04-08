@@ -23,4 +23,4 @@ p = beam.Pipeline(options=options)
 p.run()
 
 
-#testing is possible with DirectRunner, it takes faster since it is run locally
+#testing is possible with DirectRunner, it takes faster to run small jobs since it is run locally
