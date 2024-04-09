@@ -23,6 +23,25 @@ def is_empty(row):
     else:
         return True
 
+def get_arguments():
+  parser = argparse.ArgumentParser()
+
+  parser.add_argument('--project', required=True, help='GCP project')
+  parser.add_argument('--region', required=True, help='GCP region')
+  group = parser.add_mutually_exclusive_group()
+  group.add_argument('--DirectRunner', action='store_true')
+  group.add_argument('--DataflowRunner', action='store_true')
+
+  args = parser.parse_args()
+
+  runner='DirectRunner'
+  if args.DataflowRunner:
+      runner='DataflowRunner'
+
+  return dict(project=args.project,
+              region=args.region,
+              runner=runner)
+
 def name_capitalize(row):
     cols = row.split(';')
     cols[0] = cols[0].capitalize()
@@ -128,29 +147,15 @@ for blob in bucket.list_blobs(prefix='easy_beam_test/'):
 
 # p = beam.Pipeline(argv=argv)
 
-parser = argparse.ArgumentParser()
-
-parser.add_argument('--project', required=True, help='GCP project')
-parser.add_argument('--region', required=True, help='GCP region')
-group = parser.add_mutually_exclusive_group()
-group.add_argument('--DirectRunner', action='store_true')
-group.add_argument('--DataflowRunner', action='store_true')
-
-args = parser.parse_args()
-
-project=args.project
-region=args.region
-runner='DirectRunner'
-if args.DataflowRunner:
-    runner='DataflowRunner'
+args = get_arguments()
 
 options = PipelineOptions(
-    project=project,
-    region=region,  # Choose the appropriate region
+    project=args['project'],
+    region=args['region'],  # Choose the appropriate region
     job_name='examplejob4',
     temp_location='gs://temp_beam_location_1/staging', 
     staging_location='gs://temp_beam_location_1/staging',
-    runner=runner,
+    runner=args['runner'],
     worker_machine_type='e2-standard-2'
 )
 
