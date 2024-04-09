@@ -1,4 +1,3 @@
-# ok
 import apache_beam as beam
 from google.cloud import bigquery
 import google.cloud.storage as gcs
@@ -95,6 +94,13 @@ def write_to_bq(pcol, source, table_name):
             )
 
 
+def row_count_write(pcol, source):
+    return ( pcol
+            | f'{source} count' >> beam.combiners.Count.Globally()
+            | f'{source} map' >> beam.Map(lambda x: f'{source} count: '+ str(x))
+            | f'{source} to_cs' >> beam.io.textio.WriteToText(output_results,file_name_suffix='.txt')
+            )
+
 schema_definition = 'customer:STRING, birthday:DATE, nationality:STRING, sex:STRING, _created_at:DATETIME'
 
 pinterest_table_name = f'{client.project}:{dataset_name}.pinterest_data'
@@ -121,21 +127,20 @@ parser.add_argument('--project', required=True, help='GCP project')
 parser.add_argument('--region', required=True, help='GCP region')
 group = parser.add_mutually_exclusive_group()
 group.add_argument('--DirectRunner', action='store_true')
-group.add_argument('--DataFlowRunner', action='store_true')
+group.add_argument('--DataflowRunner', action='store_true')
 
 args = parser.parse_args()
 
 project=args.project
 region=args.region
 runner='DirectRunner'
-if args.DataFlowRunner:
-    runner='DataFlowRunner'
-
+if args.DataflowRunner:
+    runner='DataflowRunner'
 
 options = PipelineOptions(
     project=project,
     region=region,  # Choose the appropriate region
-    job_name='examplejob2',
+    job_name='examplejob4',
     temp_location='gs://temp_beam_location_1/staging', 
     staging_location='gs://temp_beam_location_1/staging',
     runner=runner,
@@ -143,7 +148,6 @@ options = PipelineOptions(
 )
 
 p = beam.Pipeline(options=options)
-
 
 cleaned_data = (
     p
@@ -160,6 +164,9 @@ cleaned_data = (
 pinterest_data = split_by_sources(cleaned_data, 'pinterest')
 facebook_data = split_by_sources(cleaned_data, 'facebook')
 
+row_count_write(cleaned_data, 'Total')
+row_count_write(pinterest_data, 'Pinterest')
+row_count_write(facebook_data, 'Facebook')
 # clean_result = (
 #     cleaned_data
 #     | 'total count' >> beam.combiners.Count.Globally()
