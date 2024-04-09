@@ -85,11 +85,18 @@ def to_json(row):
                 }
     return json_str
 
-def split_by_sources(pcol, source):
-    return ( pcol
-            | f'{source} filter' >> beam.Filter(lambda row: row.split(';')[4].lower() == source)
-            | f'{source} delete col' >> beam.Map(delete_platform_column)
-            )
+def split_by_sources(pcol, source, sources_list):
+    if source in sources_list:
+      return ( pcol
+              | f'{source} filter' >> beam.Filter(lambda row: row.split(';')[4].lower() == source)
+              | f'{source} delete col' >> beam.Map(delete_platform_column)
+              )
+    else:
+      return ( pcol
+              | f'{source} filter' >> beam.Filter(lambda row: row.split(';')[4].lower() not in sources_list)    # list of sources
+              | f'{source} delete col' >> beam.Map(delete_platform_column)
+              )
+      
 
 def write_to_bq(pcol, source, table_name):
     return ( pcol
@@ -183,19 +190,20 @@ def run():
       | beam.Map(date_unify)
       | beam.Map(add_created_at_and_id)
   )
-
+  
   # Get the current list of sources.
-  sources_config = load_from_yaml('sources.yaml')
+  sources_list = load_from_yaml(sources.yaml)['sources']
   
   # Splitting pcollections by source.
-  for source in sources_config['sources']:
-    pinterest_data = split_by_sources(cleaned_data, source)
-    facebook_data = split_by_sources(cleaned_data, source)
-  
+  pinterest_data = split_by_sources(cleaned_data, 'pinterest')
+  facebook_data = split_by_sources(cleaned_data, 'facebook')
+  other_data = split_by_sources(cleaned_data, 'other')
+
   # Counting rows and writing the information into Cloud Storage.
   row_count_write(cleaned_data, 'Total')
   row_count_write(pinterest_data, 'Pinterest')
   row_count_write(facebook_data, 'Facebook')
+  row_count_write(other_data, 'other')
   
   # Writing splitted data into BigQuery.
   write_to_bq(pinterest_data, 'pinterest', pinterest_table_name)
