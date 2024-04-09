@@ -5,24 +5,6 @@ from apache_beam.runners.runner import PipelineState
 import argparse
 from apache_beam.options.pipeline_options import PipelineOptions
 
-client = bigquery.Client()
-dataset_name = 'registrated_clients'
-dataset_id = f'{client.project}.{dataset_name}'
-
-try:
-    client.get_dataset(dataset_id)
-except:
-    dataset = bigquery.Dataset(dataset_id)
-    dataset.location = "EU"
-    dataset.description = "Registrated client details"
-    dataset_ref = client.create_dataset(dataset, timeout=60)
-def is_empty(row):
-    cols = row.split(';')
-    if cols[0] == '' or cols[2] == '' or cols[3] == '' or cols[4] == '' or cols[6] == '' :
-        return False
-    else:
-        return True
-
 def get_arguments():
   parser = argparse.ArgumentParser()
 
@@ -121,7 +103,26 @@ def row_count_write(pcol, source):
             | f'{source} to_cs' >> beam.io.textio.WriteToText(output_results,file_name_suffix='.txt')
             )
 
-schema_definition = 'customer:STRING, birthday:DATE, nationality:STRING, sex:STRING, _created_at:DATETIME'
+# Create dataset if needed.
+client = bigquery.Client()
+dataset_name = 'registrated_clients'
+dataset_id = f'{client.project}.{dataset_name}'
+
+try:
+    client.get_dataset(dataset_id)
+except:
+    dataset = bigquery.Dataset(dataset_id)
+    dataset.location = "EU"
+    dataset.description = "Registrated client details"
+    dataset_ref = client.create_dataset(dataset, timeout=60)
+def is_empty(row):
+    cols = row.split(';')
+    if cols[0] == '' or cols[2] == '' or cols[3] == '' or cols[4] == '' or cols[6] == '' :
+        return False
+    else:
+        return True
+
+
 
 pinterest_table_name = f'{client.project}:{dataset_name}.pinterest_data'
 facebook_table_name = f'{client.project}:{dataset_name}.facebook_data'
@@ -172,6 +173,8 @@ cleaned_data = (
     | beam.Map(date_unify)
     | beam.Map(add_created_at_and_id)
 )
+
+schema_definition = 'customer:STRING, birthday:DATE, nationality:STRING, sex:STRING, _created_at:DATETIME'
 
 # Splitting pcollections by source.
 pinterest_data = split_by_sources(cleaned_data, 'pinterest')
