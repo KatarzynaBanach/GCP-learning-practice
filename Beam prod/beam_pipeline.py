@@ -95,6 +95,7 @@ def write_to_bq(pcol, source, table_name):
 
 
 def row_count_write(pcol, source):
+    output_results = f'gs://temp_beam_location_1/easy_beam_test/count_{source.lower()}'
     return ( pcol
             | f'{source} count' >> beam.combiners.Count.Globally()
             | f'{source} map' >> beam.Map(lambda x: f'{source} count: '+ str(x))
@@ -209,9 +210,9 @@ with open('pipeline_status.txt', 'w') as f:
 gcs_bucket = 'temp_beam_location_1'
 bucket = gcs.Client().get_bucket(gcs_bucket)
 
-for blob in bucket.list_blobs(prefix='pipeline_result/'):
+for blob in bucket.list_blobs(prefix='easy_beam_test/'):
   blob.delete()
 
-bucket.blob('pipeline_result/pipeline_status.txt').upload_from_filename('pipeline_status.txt')
+bucket.blob('easy_beam_test/pipeline_status.txt').upload_from_filename('pipeline_status.txt')
 if os.path.exists("pipeline_status.txt"):
   os.remove("pipeline_status.txt")
