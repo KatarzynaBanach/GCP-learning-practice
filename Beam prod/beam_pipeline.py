@@ -6,10 +6,15 @@ import argparse
 from apache_beam.options.pipeline_options import PipelineOptions
 import google.cloud.storage as gcs
 import os
+import yaml
 
 gcs_bucket = 'temp_beam_location_1'
-schema_definition = 'customer:STRING, birthday:DATE, nationality:STRING, sex:STRING, _created_at:DATETIME'
 
+def load_from_yaml(file_path):
+  with open(file_path, 'r') as f:
+    config = yaml.safe_load(f)
+  return config
+  
 def get_arguments():
   parser = argparse.ArgumentParser()
 
@@ -80,13 +85,20 @@ def to_json(row):
                 }
     return json_str
 
-def split_by_sources(pcol, source):
-    return ( pcol
-            | f'{source} filter' >> beam.Filter(lambda row: row.split(';')[4].lower() == source)
-            | f'{source} delete col' >> beam.Map(delete_platform_column)
-            )
+def split_by_sources(pcol, source, sources_list):
+    if source in sources_list:
+      return ( pcol
+              | f'{source} filter' >> beam.Filter(lambda row: row.split(';')[4].lower() == source)
+              | f'{source} delete col' >> beam.Map(delete_platform_column)
+              )
+    else:
+      return ( pcol
+              | f'{source} filter' >> beam.Filter(lambda row: row.split(';')[4].lower() not in sources_list)    # list of sources
+              | f'{source} delete col' >> beam.Map(delete_platform_column)
+              )
+      
 
-def write_to_bq(pcol, source, table_name):
+def write_to_bq(pcol, source, table_name, schema_definition):
     return ( pcol
             | f'{source} to json' >> beam.Map(to_json)
             | f'{source} write' >> beam.io.WriteToBigQuery(
@@ -109,6 +121,11 @@ def row_count_write(pcol, source):
             )
 
 def run():
+  
+# Loading configuration from yaml.
+  config = load_from_yaml('config.yaml')
+  sources_list = config['sources']
+  schema_definition = ', '.join([f"{key}:{value}" for key, value in config['schema_definition'].items()])
 
   # Create dataset if needed.
   client = bigquery.Client()
@@ -180,17 +197,19 @@ def run():
   )
   
   # Splitting pcollections by source.
-  pinterest_data = split_by_sources(cleaned_data, 'pinterest')
-  facebook_data = split_by_sources(cleaned_data, 'facebook')
-  
+  pinterest_data = split_by_sources(cleaned_data, 'pinterest', sources_list)
+  facebook_data = split_by_sources(cleaned_data, 'facebook', sources_list)
+  other_data = split_by_sources(cleaned_data, 'other', sources_list)
+
   # Counting rows and writing the information into Cloud Storage.
   row_count_write(cleaned_data, 'Total')
   row_count_write(pinterest_data, 'Pinterest')
   row_count_write(facebook_data, 'Facebook')
-  
+  row_count_write(other_data, 'other')
+
   # Writing splitted data into BigQuery.
-  write_to_bq(pinterest_data, 'pinterest', pinterest_table_name)
-  write_to_bq(facebook_data, 'facebook', facebook_table_name)
+  write_to_bq(pinterest_data, 'pinterest', pinterest_table_name, schema_definition)
+  write_to_bq(facebook_data, 'facebook', facebook_table_name, schema_definition)
   
   # Runing pipeline.
   pipeline_state = p.run().wait_until_finish()
