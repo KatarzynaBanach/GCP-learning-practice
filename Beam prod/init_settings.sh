@@ -13,3 +13,4 @@ gcloud storage cp customer_data.csv gs://$BUCKET_NAME/customer/customer_data.csv
 # maybe function in case of transformation for fb and pinterest? then list of sources?
 # vm to do it, instead of cloud shell
 # add argparse -> and group for directrunner and dataflowrunner
+# inform it there is a new source
