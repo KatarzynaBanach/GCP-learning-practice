@@ -3,7 +3,7 @@ import apache_beam as beam
 from google.cloud import bigquery
 import google.cloud.storage as gcs
 from apache_beam.runners.runner import PipelineState
-
+import argparse
 from apache_beam.options.pipeline_options import PipelineOptions
 
 client = bigquery.Client()
@@ -115,13 +115,30 @@ facebook_table_name = f'{client.project}:{dataset_name}.facebook_data'
 
 # p = beam.Pipeline(argv=argv)
 
+parser = argparse.ArgumentParser()
+
+parser.add_argument('--project', required=True, help='GCP project')
+parser.add_argument('--region', required=True, help='GCP region')
+group = parser.add_mutually_exclusive_group()
+group.add_argument('--DirectRunner', action='store_true')
+group.add_argument('--DataFlowRunner', action='store_true')
+
+args = parser.parse_args()
+
+project=args.project
+region=args.region
+runner='DirectRunner'
+if args.DataFlowRunner:
+    runner='DataFlowRunner'
+
+
 options = PipelineOptions(
-    project='digital-bonfire-419015',
-    region='europe-central2',  # Choose the appropriate region
+    project=project,
+    region=region,  # Choose the appropriate region
     job_name='examplejob2',
     temp_location='gs://temp_beam_location_1/staging', 
     staging_location='gs://temp_beam_location_1/staging',
-    runner='DirectRunner',
+    runner=runner,
     worker_machine_type='e2-standard-2'
 )
 
