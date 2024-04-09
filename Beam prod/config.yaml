@@ -1,0 +1,10 @@
+sources:
+  - facebook
+  - pinterest
+
+schema_definition:
+  customer: STRING
+  birthday: DATE
+  nationality: STRING
+  sex: STRING
+  _created_at: DATETIME
