@@ -8,7 +8,6 @@ gcloud storage cp customer_data.csv gs://$BUCKET_NAME/customer/customer_data.csv
 
 # todo:
 # terraform for bucket
-# add if _main_
 # maybe function in case of transformation for fb and pinterest? then list of sources?
 # vm to do it, instead of cloud shell
 # inform it there is a new source
