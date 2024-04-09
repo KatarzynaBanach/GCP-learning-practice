@@ -10,6 +10,11 @@ import os
 gcs_bucket = 'temp_beam_location_1'
 schema_definition = 'customer:STRING, birthday:DATE, nationality:STRING, sex:STRING, _created_at:DATETIME'
 
+def load_from_yaml(file_path):
+  with open(file_path, 'r') as f:
+    config = yaml.safe_load(f)
+  return config
+  
 def get_arguments():
   parser = argparse.ArgumentParser()
 
@@ -109,7 +114,7 @@ def row_count_write(pcol, source):
             )
 
 def run():
-
+  
   # Create dataset if needed.
   client = bigquery.Client()
   dataset_name = 'registrated_clients'
@@ -178,10 +183,14 @@ def run():
       | beam.Map(date_unify)
       | beam.Map(add_created_at_and_id)
   )
+
+  # Get the current list of sources.
+  sources_config = load_from_yaml('sources.yaml')
   
   # Splitting pcollections by source.
-  pinterest_data = split_by_sources(cleaned_data, 'pinterest')
-  facebook_data = split_by_sources(cleaned_data, 'facebook')
+  for source in sources_config['sources']:
+    pinterest_data = split_by_sources(cleaned_data, source)
+    facebook_data = split_by_sources(cleaned_data, source)
   
   # Counting rows and writing the information into Cloud Storage.
   row_count_write(cleaned_data, 'Total')
