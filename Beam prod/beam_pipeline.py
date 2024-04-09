@@ -6,6 +6,7 @@ import argparse
 from apache_beam.options.pipeline_options import PipelineOptions
 import google.cloud.storage as gcs
 import os
+import yaml
 
 gcs_bucket = 'temp_beam_location_1'
 schema_definition = 'customer:STRING, birthday:DATE, nationality:STRING, sex:STRING, _created_at:DATETIME'
@@ -192,12 +193,12 @@ def run():
   )
   
   # Get the current list of sources.
-  sources_list = load_from_yaml(sources.yaml)['sources']
+  sources_list = load_from_yaml('sources.yaml')['sources']
   
   # Splitting pcollections by source.
-  pinterest_data = split_by_sources(cleaned_data, 'pinterest')
-  facebook_data = split_by_sources(cleaned_data, 'facebook')
-  other_data = split_by_sources(cleaned_data, 'other')
+  pinterest_data = split_by_sources(cleaned_data, 'pinterest', sources_list)
+  facebook_data = split_by_sources(cleaned_data, 'facebook', sources_list)
+  other_data = split_by_sources(cleaned_data, 'other', sources_list)
 
   # Counting rows and writing the information into Cloud Storage.
   row_count_write(cleaned_data, 'Total')
