@@ -1,9 +1,8 @@
-# ok
 import apache_beam as beam
 from google.cloud import bigquery
 import google.cloud.storage as gcs
 from apache_beam.runners.runner import PipelineState
-
+import argparse
 from apache_beam.options.pipeline_options import PipelineOptions
 
 client = bigquery.Client()
@@ -75,6 +74,33 @@ def to_json(row):
                 }
     return json_str
 
+def split_by_sources(pcol, source):
+    return ( pcol
+            | f'{source} filter' >> beam.Filter(lambda row: row.split(';')[4].lower() == source)
+            | f'{source} delete col' >> beam.Map(delete_platform_column)
+            )
+
+def write_to_bq(pcol, source, table_name):
+    return ( pcol
+            | f'{source} to json' >> beam.Map(to_json)
+            | f'{source} write' >> beam.io.WriteToBigQuery(
+                table=table_name,
+                schema=schema_definition,
+                create_disposition=beam.io.BigQueryDisposition.CREATE_IF_NEEDED,
+                write_disposition=beam.io.BigQueryDisposition.WRITE_APPEND,
+                custom_gcs_temp_location='gs://temp_beam_location_1/staging',
+                additional_bq_parameters={'timePartitioning': {'type': 'DAY'}}
+                )
+            )
+
+
+def row_count_write(pcol, source):
+    output_results = f'gs://temp_beam_location_1/easy_beam_test/count_{source.lower()}'
+    return ( pcol
+            | f'{source} count' >> beam.combiners.Count.Globally()
+            | f'{source} map' >> beam.Map(lambda x: f'{source} count: '+ str(x))
+            | f'{source} to_cs' >> beam.io.textio.WriteToText(output_results,file_name_suffix='.txt')
+            )
 
 schema_definition = 'customer:STRING, birthday:DATE, nationality:STRING, sex:STRING, _created_at:DATETIME'
 
@@ -96,20 +122,33 @@ facebook_table_name = f'{client.project}:{dataset_name}.facebook_data'
 
 # p = beam.Pipeline(argv=argv)
 
+parser = argparse.ArgumentParser()
+
+parser.add_argument('--project', required=True, help='GCP project')
+parser.add_argument('--region', required=True, help='GCP region')
+group = parser.add_mutually_exclusive_group()
+group.add_argument('--DirectRunner', action='store_true')
+group.add_argument('--DataflowRunner', action='store_true')
+
+args = parser.parse_args()
+
+project=args.project
+region=args.region
+runner='DirectRunner'
+if args.DataflowRunner:
+    runner='DataflowRunner'
+
 options = PipelineOptions(
-    project='digital-bonfire-419015',
-    region='europe-central2',  # Choose the appropriate region
-    job_name='examplejob2',
+    project=project,
+    region=region,  # Choose the appropriate region
+    job_name='examplejob4',
     temp_location='gs://temp_beam_location_1/staging', 
     staging_location='gs://temp_beam_location_1/staging',
-    runner='DataflowRunner',
+    runner=runner,
     worker_machine_type='e2-standard-2'
 )
 
-# -------
-
 p = beam.Pipeline(options=options)
-
 
 cleaned_data = (
     p
@@ -123,61 +162,18 @@ cleaned_data = (
     | beam.Map(add_created_at_and_id)
 )
 
-pinterest_data = (
-    cleaned_data
-    | 'pinterest filter' >> beam.Filter(lambda row: row.split(';')[4].lower() == 'pinterest')
-    | 'pinterest delete col' >> beam.Map(delete_platform_column)
-)
+# Splitting pcollections by source.
+pinterest_data = split_by_sources(cleaned_data, 'pinterest')
+facebook_data = split_by_sources(cleaned_data, 'facebook')
 
-facebook_data = (
-    cleaned_data
-    | 'facebook filter' >> beam.Filter(lambda row: row.split(';')[4].lower() == 'facebook')
-    | 'facebook delete col' >> beam.Map(delete_platform_column)
-)
+# Counting rows and writing the information into Cloud Storage.
+row_count_write(cleaned_data, 'Total')
+row_count_write(pinterest_data, 'Pinterest')
+row_count_write(facebook_data, 'Facebook')
 
-# clean_result = (
-#     cleaned_data
-#     | 'total count' >> beam.combiners.Count.Globally()
-#     | 'total map' >> beam.Map(lambda x: 'Total Count: '+ str(x))
-# )
-
-# pinterest_result = (
-#     pinterest_data
-#     | 'pinterest count' >> beam.combiners.Count.Globally()
-#     | 'pinterest map' >> beam.Map(lambda x: 'Pinterest count: ' + str(x))
-# )
-
-# facebook_result =(
-#     facebook_data
-#     | 'facebook count' >> beam.combiners.Count.Globally()
-#     | 'facebook map' >> beam.Map(lambda x: 'Facebook count: ' + str(x))
-# )
-
-(
-    pinterest_data
-    | 'pinterest to json' >> beam.Map(to_json)
-    | 'write pinterest' >> beam.io.WriteToBigQuery(
-        table=pinterest_table_name,
-        schema=schema_definition,
-        create_disposition=beam.io.BigQueryDisposition.CREATE_IF_NEEDED,
-        write_disposition=beam.io.BigQueryDisposition.WRITE_APPEND,
-        custom_gcs_temp_location='gs://temp_beam_location_1/staging',
-        additional_bq_parameters={'timePartitioning': {'type': 'DAY'}}
-    )
-)
-
-(
-    facebook_data
-    | 'facebook to json' >> beam.Map(to_json)
-    | 'write facebook' >> beam.io.WriteToBigQuery(
-        table=facebook_table_name,
-        schema=schema_definition,
-        create_disposition=beam.io.BigQueryDisposition.CREATE_IF_NEEDED,
-        write_disposition=beam.io.BigQueryDisposition.WRITE_APPEND,
-        custom_gcs_temp_location='gs://temp_beam_location_1/staging',
-        additional_bq_parameters={'timePartitioning': {'type': 'DAY'}}
-    )
-)
+# Writing splitted data into BigQuery.
+write_to_bq(pinterest_data, 'pinterest', pinterest_table_name)
+write_to_bq(facebook_data, 'facebook', facebook_table_name)
 
 pipeline_state = p.run().wait_until_finish()
 
@@ -199,9 +195,9 @@ with open('pipeline_status.txt', 'w') as f:
 gcs_bucket = 'temp_beam_location_1'
 bucket = gcs.Client().get_bucket(gcs_bucket)
 
-for blob in bucket.list_blobs(prefix='pipeline_result/'):
+for blob in bucket.list_blobs(prefix='easy_beam_test/'):
   blob.delete()
 
-bucket.blob('pipeline_result/pipeline_status.txt').upload_from_filename('pipeline_status.txt')
+bucket.blob('easy_beam_test/pipeline_status.txt').upload_from_filename('pipeline_status.txt')
 if os.path.exists("pipeline_status.txt"):
   os.remove("pipeline_status.txt")
