@@ -9,7 +9,6 @@ import os
 import yaml
 
 gcs_bucket = 'temp_beam_location_1'
-schema_definition = 'customer:STRING, birthday:DATE, nationality:STRING, sex:STRING, _created_at:DATETIME'
 
 def load_from_yaml(file_path):
   with open(file_path, 'r') as f:
@@ -99,7 +98,7 @@ def split_by_sources(pcol, source, sources_list):
               )
       
 
-def write_to_bq(pcol, source, table_name):
+def write_to_bq(pcol, source, table_name, schema_definition):
     return ( pcol
             | f'{source} to json' >> beam.Map(to_json)
             | f'{source} write' >> beam.io.WriteToBigQuery(
@@ -123,6 +122,11 @@ def row_count_write(pcol, source):
 
 def run():
   
+# Loading configuration from yaml.
+  config = load_from_yaml('config.yaml')
+  sources_list = config['sources']
+  schema_definition = ', '.join([f"{key}:{value}" for key, value in config['schema_definition'].items()])
+
   # Create dataset if needed.
   client = bigquery.Client()
   dataset_name = 'registrated_clients'
@@ -192,9 +196,6 @@ def run():
       | beam.Map(add_created_at_and_id)
   )
   
-  # Get the current list of sources.
-  sources_list = load_from_yaml('sources.yaml')['sources']
-  
   # Splitting pcollections by source.
   pinterest_data = split_by_sources(cleaned_data, 'pinterest', sources_list)
   facebook_data = split_by_sources(cleaned_data, 'facebook', sources_list)
@@ -205,10 +206,10 @@ def run():
   row_count_write(pinterest_data, 'Pinterest')
   row_count_write(facebook_data, 'Facebook')
   row_count_write(other_data, 'other')
-  
+
   # Writing splitted data into BigQuery.
-  write_to_bq(pinterest_data, 'pinterest', pinterest_table_name)
-  write_to_bq(facebook_data, 'facebook', facebook_table_name)
+  write_to_bq(pinterest_data, 'pinterest', pinterest_table_name, schema_definition)
+  write_to_bq(facebook_data, 'facebook', facebook_table_name, schema_definition)
   
   # Runing pipeline.
   pipeline_state = p.run().wait_until_finish()
