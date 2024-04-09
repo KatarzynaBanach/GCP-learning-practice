@@ -162,31 +162,16 @@ cleaned_data = (
     | beam.Map(add_created_at_and_id)
 )
 
+# Splitting pcollections by source.
 pinterest_data = split_by_sources(cleaned_data, 'pinterest')
 facebook_data = split_by_sources(cleaned_data, 'facebook')
 
+# Counting rows and writing the information into Cloud Storage.
 row_count_write(cleaned_data, 'Total')
 row_count_write(pinterest_data, 'Pinterest')
 row_count_write(facebook_data, 'Facebook')
-# clean_result = (
-#     cleaned_data
-#     | 'total count' >> beam.combiners.Count.Globally()
-#     | 'total map' >> beam.Map(lambda x: 'Total Count: '+ str(x))
-# )
 
-# pinterest_result = (
-#     pinterest_data
-#     | 'pinterest count' >> beam.combiners.Count.Globally()
-#     | 'pinterest map' >> beam.Map(lambda x: 'Pinterest count: ' + str(x))
-# )
-
-# facebook_result =(
-#     facebook_data
-#     | 'facebook count' >> beam.combiners.Count.Globally()
-#     | 'facebook map' >> beam.Map(lambda x: 'Facebook count: ' + str(x))
-# )
-
-
+# Writing splitted data into BigQuery.
 write_to_bq(pinterest_data, 'pinterest', pinterest_table_name)
 write_to_bq(facebook_data, 'facebook', facebook_table_name)
 
