@@ -107,6 +107,12 @@ schema_definition = 'customer:STRING, birthday:DATE, nationality:STRING, sex:STR
 pinterest_table_name = f'{client.project}:{dataset_name}.pinterest_data'
 facebook_table_name = f'{client.project}:{dataset_name}.facebook_data'
 
+gcs_bucket = 'temp_beam_location_1'
+bucket = gcs.Client().get_bucket(gcs_bucket)
+
+# Clear bucket with results.
+for blob in bucket.list_blobs(prefix='easy_beam_test/'):
+  blob.delete()
 
 # argv = [
 # '--project={0}'.format(client.project),
@@ -191,12 +197,6 @@ import os
 
 with open('pipeline_status.txt', 'w') as f:
     f.write(pipeline_result)
-
-gcs_bucket = 'temp_beam_location_1'
-bucket = gcs.Client().get_bucket(gcs_bucket)
-
-for blob in bucket.list_blobs(prefix='easy_beam_test/'):
-  blob.delete()
 
 bucket.blob('easy_beam_test/pipeline_status.txt').upload_from_filename('pipeline_status.txt')
 if os.path.exists("pipeline_status.txt"):
